@@ -21,13 +21,6 @@
 #include <netinet/in_systm.h> //tipos de dados
 
 
-int is_little_endian() {
-    short int number = 0x1;
-    char *numPtr = (char *) &number;
-    return (numPtr[0] == 1);
-}
-
-
 /* default snap length (maximum bytes per packet to capture) */
 #define BUFFER_SIZE 1518
 
@@ -82,130 +75,149 @@ struct iphdr2
     u_int8_t ttl;
     u_int8_t protocol;
     u_int16_t checksum;
-//    u_int8_t source_address[4];
-//    u_int8_t target_address[4];
     u_int32_t source_address;
     u_int32_t target_address;
-    /*The options start here. */
 };
 
 //if_aro.h
 struct arphdr2 {
-    u_int16_t hw_type;    /* Hardware Type           */
-    u_int16_t proto_type;    /* Protocol Type           */
-    u_char hw_len;        /* Hardware Address Length */
-    u_char proto_len;        /* Protocol Address Length */
-    u_int16_t operation;     /* Operation Code          */
-    u_char source_mac[6];      /* Sender hardware address */
-    u_char source_ip[4];      /* Sender IP address       */
-    u_char target_mac[6];      /* Target hardware address */
-    u_char target_ip[4];      /* Target IP address       */
+    u_int16_t hw_type;
+    u_int16_t proto_type;
+    u_char hw_len;
+    u_char proto_len;
+    u_int16_t operation;
+    u_char source_hw[6];
+    u_char source_ip[4];
+    u_char target_hw[6];
+    u_char target_ip[4];
 };
 
+struct log_files {
+    FILE *ethernet;
+    FILE *arp;
+    FILE *ipv4;
+    FILE *ipv6;
+    FILE *total;
+};
+
+struct counter {
+    int total;
+    int ipv4;
+    int arp;
+    int ipv6;
+};
 
 //unsigned char string[18];
-char * inet_ntoa2(u_int32_t in)
+void inet_ntoa2(u_int32_t in, char * buf)
 {
-    static char buf[18];
     unsigned char *bytes = (unsigned char *) &in;
-    snprintf (buf, 18, "%d.%d.%d.%d",
-              bytes[0], bytes[1], bytes[2], bytes[3]);
-    return buf;
+    snprintf(buf, 18, "%d.%d.%d.%d", bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
-
-//char * inet_ntoa2(u_int32_t in)
-//{
-//    static char buf[18];
-//    return inet_ntoa2(in, buf);
-//}
-
-
-char * ether_ntoa2_(uint8_t *ether_addr, char *buf)
+void inet_ntoa2_ptr(uint8_t *ip_addr, char *buf[18])
 {
-    sprintf (buf, "%x:%x:%x:%x:%x:%x",
-             ether_addr[0], ether_addr[1], ether_addr[2], ether_addr[3], ether_addr[4], ether_addr[5]);
-    return buf;
+    sprintf(buf, "%d.%d.%d.%d", ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
 }
 
-char * ether_ntoa2(uint8_t *ether_addr)
+void ether_ntoa2(uint8_t *addr, char *buf)
 {
-    static char buf[18];
-    return ether_ntoa2_(ether_addr, buf);
+    sprintf (buf, "%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 }
 
-
-void func_arp(unsigned char* buffer, int buffer_size)
+void func_arp(const unsigned char* buffer, int buffer_size, FILE *log_file)
 {
     struct arphdr2 *arp_header;
     arp_header = (struct arphdr2 *) (buffer + SIZE_ETHERNET);
+    static char source_ip[18], target_ip[18], source_hw[18], target_hw[18];
+    inet_ntoa2_ptr(arp_header->target_ip, target_ip);
+    inet_ntoa2_ptr(arp_header->source_ip, source_ip);
+    ether_ntoa2(arp_header->target_hw, target_hw);
+    ether_ntoa2(arp_header->source_hw, source_hw);
 
-//    snprintf (buffer, sizeof (buffer), "%d.%d.%d.%d",
-//              bytes[0], bytes[1], bytes[2], bytes[3]);
-    printf("hardware_type, protocol_type, hardware_address_length, protocola_address_length, operation_code, sender_hardware_address, sender_ip_address, target_hardware_address, target_ip_address\r");
-
-    printf("%d,  %x, %d, %d, %d, %s, %pI4, %s, %pI4\r",
+    fprintf(log_file, "%d,  %x, %d, %d, %d, %s, %s, %s, %s\n\n",
            (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
-           arp_header->proto_len, (unsigned int)arp_header->operation, ether_ntoa2(arp_header->source_mac),
-           arp_header->source_ip, ether_ntoa2(arp_header->target_mac), arp_header->target_ip);
+           arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
 
 //    fprintf(logfile,"\n");
 }
 
-void func_ip(unsigned char* buffer, int buffer_size)
+void func_ip(const unsigned char* buffer, int buffer_size, FILE *log_file)
 {
     struct iphdr2 *ip_header;
     ip_header = (struct iphdr2 *) (buffer + SIZE_ETHERNET);
-//    static char source_address[18], target_address[18];
-//    inet_ntoa2(ip_header->source_address, source_address);
-//    inet_ntoa2(ip_header->target_address, target_address);
+    static char source[18], target[18];
+    inet_ntoa2(ip_header->target_address, target);
+    inet_ntoa2(ip_header->source_address, source);
 
-    printf("version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\r");
 
-    printf("%d,  %d, %d, %d, %d, %d, %d, %d, %s, %s\r",
+    fprintf(log_file, "%d,  %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
-           (unsigned int)ip_header->protocol, ntohs(ip_header->checksum),
-           inet_ntoa2(ip_header->source_address), inet_ntoa2(ip_header->source_address));
+           (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 
 //    fprintf(logfile,"\n");
 }
 
 
-void func_packet(const u_char *buffer, int buffer_size) {
+void func_packet(const unsigned char *buffer, int buffer_size, struct log_files* ptr_logs, struct counter *count) {
     int total = 0, ipv4 = 0, arp=0, ipv6 = 0;
+    static char source[18], target[18];
+    struct ether_header2 *eth_head;  /* The ethernet header [1] */
+//    struct log_files logs;
+//    * logsptr_logs = &;
 
-    //Get the IP Header part of this packet , excluding the ethernet header
-    struct ether_header2 *ethernet_header;  /* The ethernet header [1] */
+    eth_head = (struct ether_header2 *) (buffer);
+    ether_ntoa2(eth_head->target, target);
+    ether_ntoa2(eth_head->source, source);
+    count->total++;
 
-    ethernet_header = (struct ether_header2 *) (buffer);
-    ++total;
-    printf("Ether Type 0x%x \n", ntohs(ethernet_header->type));
-//    if (ethernet_header->type == 0x86dd){
-// printf("***Ether Type %x \n", ethernet_header->type);
-//    }
+    fprintf(ptr_logs->ethernet, "%s, %s, 0x%x\n", target, source, ntohs(eth_head->type));
 
-    switch (ntohs(ethernet_header->type)) //Check the Protocol and do accordingly...
+    switch (ntohs(eth_head->type)) //Check the Protocol and do accordingly...
     {
         case ETHERTYPE_IP:
-            ++ipv4;
-            func_ip(buffer, buffer_size);
+            count->ipv4++;
+            func_ip(buffer, buffer_size, ptr_logs->ipv4);
             break;
         case ETHERTYPE_ARP:
-            ++arp;
+            count->arp++;
+            func_arp(buffer, buffer_size, ptr_logs->arp);
             break;
         case ETHERTYPE_IPV6:
-            ++ipv6;
-            func_ip(buffer, buffer_size);
+            count->ipv6++;
+            func_ip(buffer, buffer_size, ptr_logs->ipv6);
             break;
     }
-    printf("Total : %d, ipv4: %d, arp: %d, ipv6: %d\r", total, ipv4, arp, ipv6);
+    printf("Total : %d, ipv4: %d, arp: %d, ipv6: %d\n", count->total, count->ipv4, count->arp, count->ipv6);
+    fprintf(ptr_logs->total, "Total : %d, ipv4: %d, arp: %d, ipv6: %d\n", count->total, count->ipv4, count->arp, count->ipv6);
 }
 
 
 
 int main(int argc, char *argv[]) {
     int saddr_size, buffer_size;
+    struct log_files logs;
+    struct log_files *ptr_logs = &logs;
+    struct counter count;
+    count.arp=0;
+    count.ipv4=0;
+    count.ipv6=0;
+    count.total=0;
+    logs.ethernet = fopen("ethernet.txt", "w");
+    logs.arp = fopen("arp.txt", "w");
+    logs.ipv4 = fopen("ipv4.txt", "w");
+    logs.ipv6 = fopen("ipv6.txt", "w");
+    logs.total = fopen("total.txt", "w");
+    fprintf(logs.ethernet, "target_hw_addr, source_hw_addr, type\n");
+    fprintf(logs.arp, "hw_type, proto_type, hw_addr_len, proto_addr_len, op_code, source_hw_addr, source_ip_addr, "
+           "target_hw_addr, target_ip_addr\n");
+    fprintf(logs.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+
+
+
+//    FILE *ip4_file;
+//    FILE *ip6_file;
+//    FILE *arp_file;
 
     /* Criacao do socket. Todos os pacotes devem ser construidos a partir do protocolo Ethernet. */
     /* De um "man" para ver os parametros.*/
@@ -226,11 +238,11 @@ int main(int argc, char *argv[]) {
     // recepcao de pacotes
     while (1) {
         buffer_size = recv(sockd, (char *) &buffer, sizeof(buffer), 0x0);
-        func_packet(buffer, buffer_size);
+        func_packet(buffer, buffer_size, ptr_logs, &count);
 
         // impressão do conteudo - exemplo Endereco Destino e Endereco Origem
-        printf("MAC Destino: %x:%x:%x:%x:%x:%x \n", buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-        printf("MAC Origem:  %x:%x:%x:%x:%x:%x \n\n", buffer[6], buffer[7], buffer[8], buffer[9], buffer[10],
-               buffer[11]);
+//        printf("MAC Destino: %x:%x:%x:%x:%x:%x \n", buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
+//        printf("MAC Origem:  %x:%x:%x:%x:%x:%x \n\n", buffer[6], buffer[7], buffer[8], buffer[9], buffer[10],
+//               buffer[11]);
     }
 }
