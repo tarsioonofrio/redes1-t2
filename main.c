@@ -10,6 +10,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
 /* Diretorios: net, netinet, linux contem os includes que descrevem */
 /* as estruturas de dados do header dos protocolos   	  	 */
 
@@ -41,11 +44,6 @@
 // Atencao!! Confira no /usr/include do seu sisop o nome correto
 // das estruturas de dados dos protocolos.
 
-unsigned char buffer[BUFFER_SIZE]; // buffer de recepcao
-
-int sockd;
-int on;
-struct ifreq ifr;
 
 
 // ethernet.h
@@ -134,11 +132,9 @@ void func_arp(const unsigned char* buffer, int buffer_size, FILE *log_file)
     ether_ntoa2(arp_header->target_hw, target_hw);
     ether_ntoa2(arp_header->source_hw, source_hw);
 
-    fprintf(log_file, "%d,  %x, %d, %d, %d, %s, %s, %s, %s\n\n",
+    fprintf(log_file, "%d,  %x, %d, %d, %d, %s, %s, %s, %s\n",
            (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
            arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
-
-//    fprintf(logfile,"\n");
 }
 
 void func_ip(const unsigned char* buffer, int buffer_size, FILE *log_file)
@@ -154,17 +150,12 @@ void func_ip(const unsigned char* buffer, int buffer_size, FILE *log_file)
            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
-
-//    fprintf(logfile,"\n");
 }
 
 
 void func_packet(const unsigned char *buffer, int buffer_size, struct log_files* ptr_logs, struct counter *count) {
-    int total = 0, ipv4 = 0, arp=0, ipv6 = 0;
     static char source[18], target[18];
-    struct ether_header2 *eth_head;  /* The ethernet header [1] */
-//    struct log_files logs;
-//    * logsptr_logs = &;
+    struct ether_header2 *eth_head;
 
     eth_head = (struct ether_header2 *) (buffer);
     ether_ntoa2(eth_head->target, target);
@@ -173,7 +164,7 @@ void func_packet(const unsigned char *buffer, int buffer_size, struct log_files*
 
     fprintf(ptr_logs->ethernet, "%s, %s, 0x%x\n", target, source, ntohs(eth_head->type));
 
-    switch (ntohs(eth_head->type)) //Check the Protocol and do accordingly...
+    switch (ntohs(eth_head->type))
     {
         case ETHERTYPE_IP:
             count->ipv4++;
@@ -195,6 +186,11 @@ void func_packet(const unsigned char *buffer, int buffer_size, struct log_files*
 
 
 int main(int argc, char *argv[]) {
+    unsigned char buffer[BUFFER_SIZE]; // buffer de recepcao
+    int sockd;
+    int on;
+    struct ifreq ifr;
+
     int saddr_size, buffer_size;
     struct log_files logs;
     struct log_files *ptr_logs = &logs;
@@ -203,21 +199,21 @@ int main(int argc, char *argv[]) {
     count.ipv4=0;
     count.ipv6=0;
     count.total=0;
-    logs.ethernet = fopen("ethernet.txt", "w");
-    logs.arp = fopen("arp.txt", "w");
-    logs.ipv4 = fopen("ipv4.txt", "w");
-    logs.ipv6 = fopen("ipv6.txt", "w");
-    logs.total = fopen("total.txt", "w");
+
+    struct stat st = {0};
+    if (stat("logs", &st) == -1) {
+        mkdir("logs", 0777);
+    }
+
+    logs.ethernet = fopen("logs/ethernet.txt", "w");
+    logs.arp = fopen("logs/arp.txt", "w");
+    logs.ipv4 = fopen("logs/ipv4.txt", "w");
+    logs.ipv6 = fopen("logs/ipv6.txt", "w");
+    logs.total = fopen("logs/total.txt", "w");
     fprintf(logs.ethernet, "target_hw_addr, source_hw_addr, type\n");
     fprintf(logs.arp, "hw_type, proto_type, hw_addr_len, proto_addr_len, op_code, source_hw_addr, source_ip_addr, "
            "target_hw_addr, target_ip_addr\n");
     fprintf(logs.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
-
-
-
-//    FILE *ip4_file;
-//    FILE *ip6_file;
-//    FILE *arp_file;
 
     /* Criacao do socket. Todos os pacotes devem ser construidos a partir do protocolo Ethernet. */
     /* De um "man" para ver os parametros.*/
@@ -239,10 +235,5 @@ int main(int argc, char *argv[]) {
     while (1) {
         buffer_size = recv(sockd, (char *) &buffer, sizeof(buffer), 0x0);
         func_packet(buffer, buffer_size, ptr_logs, &count);
-
-        // impressão do conteudo - exemplo Endereco Destino e Endereco Origem
-//        printf("MAC Destino: %x:%x:%x:%x:%x:%x \n", buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-//        printf("MAC Origem:  %x:%x:%x:%x:%x:%x \n\n", buffer[6], buffer[7], buffer[8], buffer[9], buffer[10],
-//               buffer[11]);
     }
 }
