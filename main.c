@@ -137,15 +137,15 @@ void func_ip(const unsigned char *buffer, int buffer_size, FILE *log_file, const
     ip_to_string(ip_header->target_address, target);
     ip_to_string(ip_header->source_address, source);
 
-    printf("%s: %d, ihl: %d, tos: %d, total_len: %d, id: %d, ttl: %d, protocol: %d, checksum: %d, source: %s, target: %s\n",
-            ip_version, (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
+    printf("IPV%d - ihl: %d, tos: %d, total_len: %d, id: %d, ttl: %d, protocol: %d, checksum: %d, source: %s, target: %s\n",
+            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
             ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
             (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 
-    fprintf(log_file, "%s, %d, %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
-            ip_version, (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
-           ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
-           (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
+    fprintf(log_file, "%d, %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
+            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
+            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
+            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 }
 
 
@@ -241,7 +241,7 @@ int main(int argc, char *argv[]) {
     }
 
     // O procedimento abaixo eh utilizado para "setar" a interface em modo promiscuo
-    strcpy(ifr.ifr_name, "eth0");
+    strcpy(ifr.ifr_name, "enp3s0");
     if (ioctl(sockd, SIOCGIFINDEX, &ifr) < 0)
         printf("erro no ioctl!");
     ioctl(sockd, SIOCGIFFLAGS, &ifr);

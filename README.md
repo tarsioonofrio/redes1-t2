@@ -9,7 +9,12 @@ ping6 localhost
 ### Test arp
 sudo arping ip_of_your_router
 
+
 ## Python virtual env
+
+Install dependency:
+
+`sudo apt-get install -y tshark`
 
 create venv
 
