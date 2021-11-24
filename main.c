@@ -33,14 +33,6 @@
 /* Ethernet addresses are 6 bytes */
 #define ETHER_ADDR_LEN    6
 
-
-/* Ethernet protocol ID's */
-#define ETHERTYPE_IP_REV  0x0008  /* IP */
-#define ETHERTYPE_ARP_REV  0x0608  /* Address resolution */
-#define ETHERTYPE_VLAN_REV  0x0081  /* IEEE 802.1Q VLAN tagging */
-#define ETHERTYPE_IPV6_REV  0xdd86  /* IP protocol version 6 */
-
-
 // Atencao!! Confira no /usr/include do seu sisop o nome correto
 // das estruturas de dados dos protocolos.
 
@@ -84,7 +76,7 @@ struct arp_header {
     u_char target_ip[4];
 };
 
-struct log_files {
+struct logger_file {
     FILE *ethernet;
     FILE *arp;
     FILE *ipv4;
@@ -170,7 +162,7 @@ uint16_t func_packet(const unsigned char *buffer, int buffer_size, FILE *log_fil
     return ntohs(eth_head->type);
 }
 
-void switcher(const unsigned char *buffer, int buffer_size, struct log_files *ptr_logs, struct counter *count,
+void switcher(const unsigned char *buffer, int buffer_size, struct logger_file *ptr_logs, struct counter *count,
               uint16_t eth_type) {
     count->total++;
     switch (eth_type)
@@ -191,7 +183,7 @@ void switcher(const unsigned char *buffer, int buffer_size, struct log_files *pt
             count->other++;
     }
 
-    printf("COUNTER - Total : %d, ipv4:  %.2f%%, arp: %.2f%%, ipv6: %.2f%%\n",
+    printf("COUNTER - total : %d, ipv4:  %.2f%%, arp: %.2f%%, ipv6: %.2f%%\n",
            (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
     fprintf(ptr_logs->total, "%d, %.2f%%, %.2f%%, %.2f%%\n",
             (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
@@ -205,9 +197,11 @@ int main(int argc, char *argv[]) {
     int on;
     struct ifreq ifr;
     int buffer_size;
-    struct log_files logs;
-    struct log_files *ptr_logs = &logs;
+
+    struct logger_file log;
+    struct logger_file *ptr_log = &log;
     uint16_t eth_type = 0;
+    uint32_t iteration = 0, max_iterations = 0;
 
     struct counter count;
     count.arp=0;
@@ -216,22 +210,27 @@ int main(int argc, char *argv[]) {
     count.total=0;
 
     struct stat st = {0};
-    if (stat("logs", &st) == -1) {
-        mkdir("logs", 0777);
+    if (stat("log", &st) == -1) {
+        mkdir("log", 0777);
     }
 
-    logs.ethernet = fopen("logs/ethernet.txt", "w");
-    logs.arp = fopen("logs/arp.txt", "w");
-    logs.ipv4 = fopen("logs/ipv4.txt", "w");
-    logs.ipv6 = fopen("logs/ipv6.txt", "w");
-    logs.total = fopen("logs/total.txt", "w");
+    if( argc == 2 ) {
+        printf("The argument supplied is %s\n", argv[1]);
+        max_iterations = strtol(argv[1], NULL, 0);
+    }
 
-    fprintf(logs.ethernet, "target_hw_addr, source_hw_addr, type\n");
-    fprintf(logs.arp, "hw_type, proto_type, hw_addr_len, proto_addr_len, op_code, source_hw_addr, source_ip_addr, "
-           "target_hw_addr, target_ip_addr\n");
-    fprintf(logs.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
-    fprintf(logs.ipv6, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
-    fprintf(logs.total, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+    log.ethernet = fopen("log/ethernet.txt", "w");
+    log.arp = fopen("log/arp.txt", "w");
+    log.ipv4 = fopen("log/ipv4.txt", "w");
+    log.ipv6 = fopen("log/ipv6.txt", "w");
+    log.total = fopen("log/total.txt", "w");
+
+    fprintf(log.ethernet, "target_hw_addr, source_hw_addr, type\n");
+    fprintf(log.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+    fprintf(log.arp, "hw_type, proto_type, hw_addr_len, proto_addr_len, op_code, source_hw_addr, source_ip_addr, "
+                     "target_hw_addr, target_ip_addr\n");
+    fprintf(log.ipv6, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+    fprintf(log.total, "total, ipv4, arp, ipv6\n");
 
     /* Criacao do socket. Todos os pacotes devem ser construidos a partir do protocolo Ethernet. */
     /* De um "man" para ver os parametros.*/
@@ -253,8 +252,18 @@ int main(int argc, char *argv[]) {
     // recepcao de pacotes
     while (1) {
         buffer_size = recv(sockd, (char *) &buffer, sizeof(buffer), 0x0);
-        eth_type = func_packet(buffer, buffer_size, ptr_logs->ethernet);
-        switcher(buffer, buffer_size, ptr_logs, &count, eth_type);
+        printf("Iteration: %d", iteration);
+        eth_type = func_packet(buffer, buffer_size, ptr_log->ethernet);
+        switcher(buffer, buffer_size, ptr_log, &count, eth_type);
+        iteration++;
+        if (iteration > max_iterations){
+            break;
+        }
 
     }
+    fclose(log.ethernet);
+    fclose(log.arp);
+    fclose(log.ipv4);
+    fclose(log.ipv6);
+    fclose(log.total);
 }

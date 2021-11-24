@@ -1,10 +1,28 @@
 # Class Network 1 - second homework
 
-### test ipv4
+### Test ipv4
 ping -c4 8.8.8.8
 
-### test ipv6
+### Test ipv6
 ping6 localhost
 
-### test arp
+### Test arp
 sudo arping ip_of_your_router
+
+## Python virtual env
+
+create venv
+
+`python3 -m venv venv`
+
+Activate venv:
+
+`bin/activate`
+
+Deactivate venv:
+
+`deactivate`
+
+Install lib:
+
+`pip install pyshark`
