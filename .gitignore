@@ -11,3 +11,5 @@ log/
 log_wire/
 
 test.log
+
+*.cap
