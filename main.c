@@ -46,8 +46,8 @@
 
 struct ethernet_header
 {
-    uint8_t  target[ETH_ALEN];
-    uint8_t  source[ETH_ALEN];
+    uint8_t  target[ETHER_ADDR_LEN];
+    uint8_t  source[ETHER_ADDR_LEN];
     uint16_t type;
 };
 
@@ -96,10 +96,10 @@ struct counter {
     float total;
     float ipv4;
     float arp;
-    float  ipv6;
+    float ipv6;
+    float other;
 };
 
-//unsigned char string[18];
 void ip_to_string(u_int32_t in, char * buf)
 {
     unsigned char *bytes = (unsigned char *) &in;
@@ -119,50 +119,65 @@ void ether_to_string(uint8_t *addr, char *buf)
 void func_arp(const unsigned char* buffer, int buffer_size, FILE *log_file)
 {
     struct arp_header *arp_header;
-    arp_header = (struct arp_header *) (buffer + SIZE_ETHERNET);
     static char source_ip[18], target_ip[18], source_hw[18], target_hw[18];
+
+    arp_header = (struct arp_header *) (buffer + SIZE_ETHERNET);
     ip_to_string_array(arp_header->target_ip, target_ip);
     ip_to_string_array(arp_header->source_ip, source_ip);
     ether_to_string(arp_header->target_hw, target_hw);
     ether_to_string(arp_header->source_hw, source_hw);
 
-    fprintf(log_file, "%d,  %x, %d, %d, %d, %s, %s, %s, %s\n",
+    printf("hw_type: %d, proto_type:%x, hw_len: %d, proto_len: %d, operation: %d, source_hw:%s, source_ip: %s, target_hw: %s, target_ip: %s\n",
+            (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
+            arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
+
+    fprintf(log_file, "%d, %x, %d, %d, %d, %s, %s, %s, %s\n",
            (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
            arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
 }
 
-void func_ip(const unsigned char* buffer, int buffer_size, FILE *log_file)
+void func_ip(const unsigned char *buffer, int buffer_size, FILE *log_file, const char *ip_version)
 {
     struct ip_header *ip_header;
-    ip_header = (struct ip_header *) (buffer + SIZE_ETHERNET);
     static char source[18], target[18];
+
+    ip_header = (struct ip_header *) (buffer + SIZE_ETHERNET);
     ip_to_string(ip_header->target_address, target);
     ip_to_string(ip_header->source_address, source);
 
+    printf("%s: %d, ihl: %d, tos: %d, total_len: %d, id: %d, ttl: %d, protocol: %d, checksum: %d, source: %s, target: %s\n",
+            ip_version, (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
+            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
+            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 
-    fprintf(log_file, "%d,  %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
-           (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
+    fprintf(log_file, "%s, %d, %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
+            ip_version, (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 }
 
 
-void func_packet(const unsigned char *buffer, int buffer_size, struct log_files* ptr_logs, struct counter *count) {
+uint16_t func_packet(const unsigned char *buffer, int buffer_size, FILE *log_file) {
     static char source[18], target[18];
     struct ethernet_header *eth_head;
-    char string[100];
     eth_head = (struct ethernet_header *) (buffer);
     ether_to_string(eth_head->target, target);
     ether_to_string(eth_head->source, source);
+
+    printf("ETHERNET - target: %s, source: %s, type: 0x%x\n", target, source, ntohs(eth_head->type));
+    fprintf(log_file, "%s, %s, 0x%x\n", target, source, ntohs(eth_head->type));
+
+    return ntohs(eth_head->type);
+}
+
+void switcher(const unsigned char *buffer, int buffer_size, struct log_files *ptr_logs, struct counter *count,
+              uint16_t eth_type) {
     count->total++;
-
-    fprintf(ptr_logs->ethernet, "%s, %s, 0x%x\n", target, source, ntohs(eth_head->type));
-
-    switch (ntohs(eth_head->type))
+    switch (eth_type)
     {
         case ETHERTYPE_IP:
             count->ipv4++;
-            func_ip(buffer, buffer_size, ptr_logs->ipv4);
+            func_ip(buffer, buffer_size, ptr_logs->ipv4, "IPV4");
             break;
         case ETHERTYPE_ARP:
             count->arp++;
@@ -170,15 +185,18 @@ void func_packet(const unsigned char *buffer, int buffer_size, struct log_files*
             break;
         case ETHERTYPE_IPV6:
             count->ipv6++;
-            func_ip(buffer, buffer_size, ptr_logs->ipv6);
+            func_ip(buffer, buffer_size, ptr_logs->ipv6, "IPV6");
             break;
+        default:
+            count->other++;
     }
-    sprintf(string, "Total : %d, ipv4:  %.2f%%, arp: %.2f%%, ipv6: %.2f%%\n",
-            (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
-    printf(string);
-    fprintf(ptr_logs->total, string);
-}
 
+    printf("COUNTER - Total : %d, ipv4:  %.2f%%, arp: %.2f%%, ipv6: %.2f%%\n",
+           (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
+    fprintf(ptr_logs->total, "%d, %.2f%%, %.2f%%, %.2f%%\n",
+            (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
+
+}
 
 
 int main(int argc, char *argv[]) {
@@ -186,10 +204,11 @@ int main(int argc, char *argv[]) {
     int sockd;
     int on;
     struct ifreq ifr;
-
-    int saddr_size, buffer_size;
+    int buffer_size;
     struct log_files logs;
     struct log_files *ptr_logs = &logs;
+    uint16_t eth_type = 0;
+
     struct counter count;
     count.arp=0;
     count.ipv4=0;
@@ -206,10 +225,13 @@ int main(int argc, char *argv[]) {
     logs.ipv4 = fopen("logs/ipv4.txt", "w");
     logs.ipv6 = fopen("logs/ipv6.txt", "w");
     logs.total = fopen("logs/total.txt", "w");
+
     fprintf(logs.ethernet, "target_hw_addr, source_hw_addr, type\n");
     fprintf(logs.arp, "hw_type, proto_type, hw_addr_len, proto_addr_len, op_code, source_hw_addr, source_ip_addr, "
            "target_hw_addr, target_ip_addr\n");
     fprintf(logs.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+    fprintf(logs.ipv6, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
+    fprintf(logs.total, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
 
     /* Criacao do socket. Todos os pacotes devem ser construidos a partir do protocolo Ethernet. */
     /* De um "man" para ver os parametros.*/
@@ -227,9 +249,12 @@ int main(int argc, char *argv[]) {
     ifr.ifr_flags |= IFF_PROMISC;
     ioctl(sockd, SIOCSIFFLAGS, &ifr);
 
+    printf("\n");
     // recepcao de pacotes
     while (1) {
         buffer_size = recv(sockd, (char *) &buffer, sizeof(buffer), 0x0);
-        func_packet(buffer, buffer_size, ptr_logs, &count);
+        eth_type = func_packet(buffer, buffer_size, ptr_logs->ethernet);
+        switcher(buffer, buffer_size, ptr_logs, &count, eth_type);
+
     }
 }
