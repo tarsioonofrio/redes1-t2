@@ -31,7 +31,7 @@
 #define SIZE_ETHERNET 14
 
 /* Ethernet addresses are 6 bytes */
-#define ETHER_ADDR_LEN    6
+//#define ETHER_ADDR_LEN    6
 
 // Atencao!! Confira no /usr/include do seu sisop o nome correto
 // das estruturas de dados dos protocolos.
@@ -92,13 +92,13 @@ struct counter {
     float other;
 };
 
-void ip_to_string(u_int32_t in, char * buf)
+void ipv4_to_string(u_int32_t in, char * buf)
 {
     unsigned char *bytes = (unsigned char *) &in;
     snprintf(buf, 18, "%d.%d.%d.%d", bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
-void ip_to_string_array(uint8_t *ip_addr, char *buf[18])
+void ipv4_to_string_array(uint8_t *ip_addr, char *buf)
 {
     sprintf(buf, "%d.%d.%d.%d", ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
 }
@@ -108,44 +108,58 @@ void ether_to_string(uint8_t *addr, char *buf)
     sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 }
 
+void ipv6_to_string(u_int32_t in, char *buf)
+{
+    unsigned char *bytes = (unsigned char *) &in;
+    sprintf(buf, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x", bytes[0], bytes[1], bytes[2], bytes[3], bytes[4],
+            bytes[5], bytes[6], bytes[7]);
+}
+
+
 void func_arp(const unsigned char* buffer, int buffer_size, FILE *log_file)
 {
     struct arp_header *arp_header;
     static char source_ip[18], target_ip[18], source_hw[18], target_hw[18];
 
     arp_header = (struct arp_header *) (buffer + SIZE_ETHERNET);
-    ip_to_string_array(arp_header->target_ip, target_ip);
-    ip_to_string_array(arp_header->source_ip, source_ip);
+    ipv4_to_string_array(arp_header->target_ip, target_ip);
+    ipv4_to_string_array(arp_header->source_ip, source_ip);
     ether_to_string(arp_header->target_hw, target_hw);
     ether_to_string(arp_header->source_hw, source_hw);
 
-    printf("hw_type: %d, proto_type:%x, hw_len: %d, proto_len: %d, operation: %d, source_hw:%s, source_ip: %s, target_hw: %s, target_ip: %s\n",
-            (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
-            arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
+    printf("ARP - hw_type: %d, proto_type: 0x%08x, hw_len: %d, proto_len: %d, operation: %d, source_hw:%s, source_ip: %s, target_hw: %s, target_ip: %s\n",
+           (unsigned int)ntohs(arp_header->hw_type), ntohs(arp_header->proto_type), (unsigned int)arp_header->hw_len,
+           arp_header->proto_len, (unsigned int)ntohs(arp_header->operation), source_hw, source_ip, target_hw, target_ip);
 
-    fprintf(log_file, "%d, %x, %d, %d, %d, %s, %s, %s, %s\n",
-           (unsigned int)arp_header->hw_type, arp_header->proto_type, (unsigned int)arp_header->hw_len,
-           arp_header->proto_len, (unsigned int)arp_header->operation, source_hw, source_ip, target_hw, target_ip);
+    fprintf(log_file, "%d, 0x%08x, %d, %d, %d, %s, %s, %s, %s\n",
+           (unsigned int)ntohs(arp_header->hw_type), ntohs(arp_header->proto_type), (unsigned int)arp_header->hw_len,
+           arp_header->proto_len, (unsigned int)ntohs(arp_header->operation), source_hw, source_ip, target_hw, target_ip);
 }
 
 void func_ip(const unsigned char *buffer, int buffer_size, FILE *log_file, const char *ip_version)
 {
     struct ip_header *ip_header;
-    static char source[18], target[18];
+    static char source4[18], target4[18], source6[INET6_ADDRSTRLEN], target6[INET6_ADDRSTRLEN];
 
     ip_header = (struct ip_header *) (buffer + SIZE_ETHERNET);
-    ip_to_string(ip_header->target_address, target);
-    ip_to_string(ip_header->source_address, source);
+    ipv4_to_string(ip_header->target_address, target4);
+    ipv4_to_string(ip_header->source_address, source4);
+    ipv6_to_string(ip_header->target_address, target6);
+    ipv6_to_string(ip_header->source_address, source6);
 
-    printf("IPV%d - ihl: %d, tos: 0x%08x, total_len: %d, id: 0x%08x, ttl: %d, protocol: %d, checksum: 0x%08x, source: %s, target: %s\n",
-            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
-            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
-            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
+    printf("IPV%d - ihl: %d, tos: 0x%08x, total_len: %d, id: 0x%08x, ttl: %d, protocol: %d, checksum: 0x%08x, source4: %s, target4: %s\n",
+           (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
+           ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
+           (unsigned int)ip_header->protocol, ntohs(ip_header->checksum),
+           ((unsigned int)ip_header->version == 4 ) ? source4 : source6,
+           ((unsigned int)ip_header->version == 4 ) ? target4 : target6);
 
     fprintf(log_file, "%d, %d, 0x%08x, %d, 0x%08x, %d, %d, 0x%08x, %s, %s\n",
             (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
             ntohs(ip_header->total_len), ntohs((uint16_t) ip_header->id), (unsigned int)ip_header->ttl,
-            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
+            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum),
+            ((unsigned int)ip_header->version == 4 ) ? source4 : source6,
+            ((unsigned int)ip_header->version == 4 ) ? target4 : target6);
 }
 
 
