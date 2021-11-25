@@ -105,7 +105,7 @@ void ip_to_string_array(uint8_t *ip_addr, char *buf[18])
 
 void ether_to_string(uint8_t *addr, char *buf)
 {
-    sprintf(buf, "%x:%x:%x:%x:%x:%x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 }
 
 void func_arp(const unsigned char* buffer, int buffer_size, FILE *log_file)
@@ -137,14 +137,14 @@ void func_ip(const unsigned char *buffer, int buffer_size, FILE *log_file, const
     ip_to_string(ip_header->target_address, target);
     ip_to_string(ip_header->source_address, source);
 
-    printf("IPV%d - ihl: %d, tos: %d, total_len: %d, id: %d, ttl: %d, protocol: %d, checksum: %d, source: %s, target: %s\n",
+    printf("IPV%d - ihl: %d, tos: 0x%08x, total_len: %d, id: 0x%08x, ttl: %d, protocol: %d, checksum: 0x%08x, source: %s, target: %s\n",
             (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
             ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
             (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 
-    fprintf(log_file, "%d, %d, %d, %d, %d, %d, %d, %d, %s, %s\n",
+    fprintf(log_file, "%d, %d, 0x%08x, %d, 0x%08x, %d, %d, 0x%08x, %s, %s\n",
             (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
-            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
+            ntohs(ip_header->total_len), ntohs((uint16_t) ip_header->id), (unsigned int)ip_header->ttl,
             (unsigned int)ip_header->protocol, ntohs(ip_header->checksum), source, target);
 }
 
@@ -156,8 +156,8 @@ uint16_t func_packet(const unsigned char *buffer, int buffer_size, FILE *log_fil
     ether_to_string(eth_head->target, target);
     ether_to_string(eth_head->source, source);
 
-    printf("ETHERNET - target: %s, source: %s, type: 0x%x\n", target, source, ntohs(eth_head->type));
-    fprintf(log_file, "%s, %s, 0x%x\n", target, source, ntohs(eth_head->type));
+    printf("ETHERNET - target: %s, source: %s, type: 0x%08x\n", target, source, ntohs(eth_head->type));
+    fprintf(log_file, "%s, %s, 0x%08x\n", target, source, ntohs(eth_head->type));
 
     return ntohs(eth_head->type);
 }
@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
     // recepcao de pacotes
     while (1) {
         buffer_size = recv(sockd, (char *) &buffer, sizeof(buffer), 0x0);
-        printf("Iteration: %d", iteration);
+        printf("Iteration: %d\n", iteration);
         eth_type = func_packet(buffer, buffer_size, ptr_log->ethernet);
         switcher(buffer, buffer_size, ptr_log, &count, eth_type);
         iteration++;
