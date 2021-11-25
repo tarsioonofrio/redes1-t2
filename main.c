@@ -43,16 +43,11 @@ struct ethernet_header
     uint16_t type;
 };
 
+// Little Endian
 struct ip_header
 {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-    unsigned int ihl:4;
-    unsigned int version:4;
-#elif __BYTE_ORDER == __BIG_ENDIAN
-    unsigned int version:4;
-    unsigned int ihl:4;
-#else
-#endif
+    uint ihl:4;
+    uint version:4;
     u_int8_t tos;
     u_int16_t total_len;
     u_int16_t id;
@@ -147,7 +142,7 @@ void func_ip(const unsigned char *buffer, int buffer_size, FILE *log_file, const
     ipv6_to_string(ip_header->target_address, target6);
     ipv6_to_string(ip_header->source_address, source6);
 
-    printf("IPV%d - ihl: %d, tos: 0x%08x, total_len: %d, id: 0x%08x, ttl: %d, protocol: %d, checksum: 0x%08x, source4: %s, target4: %s\n",
+    printf("IPv%d - ihl: %d, tos: 0x%08x, total_len: %d, id: 0x%08x, ttl: %d, protocol: %d, checksum: 0x%08x, source4: %s, target4: %s\n",
            (unsigned int)ip_header->version, (unsigned int)ip_header->ihl, (unsigned int)ip_header->tos,
            ntohs(ip_header->total_len), (unsigned int)ip_header->id, (unsigned int)ip_header->ttl,
            (unsigned int)ip_header->protocol, ntohs(ip_header->checksum),
@@ -198,9 +193,9 @@ void switcher(const unsigned char *buffer, int buffer_size, struct logger_file *
     }
 
     printf("COUNTER - total : %d, ipv4:  %.2f%%, arp: %.2f%%, ipv6: %.2f%%\n",
-           (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
+           (int)count->total, count->ipv4/count->total*100, count->arp/count->total*100, count->ipv6/count->total*100);
     fprintf(ptr_logs->total, "%d, %.2f%%, %.2f%%, %.2f%%\n",
-            (int)count->total, count->ipv4/count->total, count->arp/count->total, count->ipv6/count->total);
+            (int)count->total, count->ipv4/count->total*100, count->arp/count->total*100, count->ipv6/count->total*100);
 
 }
 
@@ -224,8 +219,8 @@ int main(int argc, char *argv[]) {
     count.total=0;
 
     struct stat st = {0};
-    if (stat("log", &st) == -1) {
-        mkdir("log", 0777);
+    if (stat("log_sniffer", &st) == -1) {
+        mkdir("log_sniffer", 0777);
     }
 
     if( argc == 2 ) {
@@ -233,11 +228,11 @@ int main(int argc, char *argv[]) {
         max_iterations = strtol(argv[1], NULL, 0);
     }
 
-    log.ethernet = fopen("log/ethernet.txt", "w");
-    log.arp = fopen("log/arp.txt", "w");
-    log.ipv4 = fopen("log/ipv4.txt", "w");
-    log.ipv6 = fopen("log/ipv6.txt", "w");
-    log.total = fopen("log/total.txt", "w");
+    log.ethernet = fopen("log_sniffer/ethernet.txt", "w");
+    log.arp = fopen("log_sniffer/arp.txt", "w");
+    log.ipv4 = fopen("log_sniffer/ipv4.txt", "w");
+    log.ipv6 = fopen("log_sniffer/ipv6.txt", "w");
+    log.total = fopen("log_sniffer/total.txt", "w");
 
     fprintf(log.ethernet, "target_hw_addr, source_hw_addr, type\n");
     fprintf(log.ipv4, "version, header_length, type, total_length, id, ttl, protocol, checksum, ip_source, destination\n");
@@ -270,7 +265,7 @@ int main(int argc, char *argv[]) {
         eth_type = func_packet(buffer, buffer_size, ptr_log->ethernet);
         switcher(buffer, buffer_size, ptr_log, &count, eth_type);
         iteration++;
-        if (iteration > max_iterations){
+        if (iteration >= max_iterations){
             break;
         }
 

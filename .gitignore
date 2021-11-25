@@ -13,3 +13,4 @@ log_wire/
 test.log
 
 *.cap
+log_sniffer/
